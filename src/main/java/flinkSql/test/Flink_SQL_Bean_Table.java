@@ -33,17 +33,17 @@ public class Flink_SQL_Bean_Table {
             }
         });
 
-        //创建表
+/*        //SQL风格 流注册，转换表
         tableEnv.createTemporaryView("sensor",mapDS);
+       // 查询
+        Table table = tableEnv.sqlQuery("select id,max(temp) from sensor group by id");
+        //表转换流输出结果
+        tableEnv.toRetractStream(table,Row.class).print();*/
 
-        //1.SQL方式实现查询
-        Table sqlTable = tableEnv.sqlQuery("select id,temp from sensor");
-
-        //1.表转换为流进行输出
-        //DataStream<Row> rowDataStream = tableEnv.toAppendStream(sqlTable, Row.class);
-        tableEnv.toRetractStream(sqlTable,Row.class).print("retract");
-       // rowDataStream.print();
-
+        //Table API风格
+        Table table1 = tableEnv.fromDataStream(mapDS);
+        Table tableResult = table1.groupBy("id").select("id,temp.min");
+        tableEnv.toRetractStream(tableResult,Row.class).print("SQL");
         //1.执行
         env.execute();
 

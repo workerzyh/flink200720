@@ -34,30 +34,27 @@ public class Flink_Sink_Kafka {
             }
         });
 
-        //对流注册一个表
+        //DSL风格
         Table table = tableEnv.fromDataStream(mapDS);
-
-        //table API DSL风格
         Table tableResult = table.select("id,temp");
 
         //SQL风格
         tableEnv.createTemporaryView("sensor",mapDS);
-        Table sqlResult = tableEnv.sqlQuery("select id,temp from sensor");
+        Table sqlResult1 = tableEnv.sqlQuery("select id,temp from sensor");
 
-        //创建文件连接器
-        tableEnv.connect(new Kafka().version("0.11")
-                        .topic("testTopic")
-                        .property(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,"hadoop102:9092"))
-                .withFormat(new Json())
+        //kafka连接器
+        tableEnv.connect(new Kafka()
+                .version("0.11")
+                .topic("testTopic")
+                .property(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,"hadoop102:9092"))
+                .withFormat(new Csv())
                 .withSchema(new Schema()
-                        .field("id", DataTypes.STRING())
-                        .field("temp",DataTypes.DOUBLE()))
+                    .field("id",DataTypes.STRING())
+                    .field("temp",DataTypes.DOUBLE()))
                 .createTemporaryTable("kafka");
-
-
-        //将数据写入文件系统
+        //结果写出
         tableEnv.insertInto("kafka",tableResult);
-        tableEnv.insertInto("kafka",sqlResult);
+        tableEnv.insertInto("kafka",sqlResult1);
 
         //执行
         env.execute();

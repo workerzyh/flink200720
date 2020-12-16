@@ -6,6 +6,7 @@ import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.java.StreamTableEnvironment;
 import org.apache.flink.table.descriptors.Csv;
 import org.apache.flink.table.descriptors.FileSystem;
+import org.apache.flink.table.descriptors.OldCsv;
 import org.apache.flink.table.descriptors.Schema;
 import org.apache.flink.types.Row;
 
@@ -23,28 +24,26 @@ public class Flink_SQL_FileSource {
 
         //构建文件连接器
         tableEnv.connect(new FileSystem().path("input/sensorreading.txt"))
-                .withFormat(new Csv())
+                .withFormat(new OldCsv())
                 .withSchema(new Schema()
-                            .field("id",DataTypes.STRING())
-                            .field("ts",DataTypes.BIGINT())
-                            .field("temp",DataTypes.DOUBLE()))
-                .createTemporaryTable("sensor");
+                    .field("id",DataTypes.STRING())
+                    .field("ts",DataTypes.BIGINT())
+                    .field("temp",DataTypes.DOUBLE()))
+                .createTemporaryTable("fileSensor");
 
-        //获取表
-        Table sensor = tableEnv.from("sensor");
+        /*//SQL风格
+        // 转换table
+        Table table = tableEnv.sqlQuery("select id,min(temp) from fileSensor group by id");
+        //table结果转换成流输出
+        tableEnv.toRetractStream(table,Row.class).print("Sql");*/
 
-        //table API查询 DSL风格
-        Table tableResult = sensor.groupBy("id").select("id,temp.max");
+        //table API风格
+        //创建表
+        Table fileSensor = tableEnv.from("fileSensor");
+        Table tableResult = fileSensor.groupBy("id").select("id,temp.min");
+        tableEnv.toRetractStream(tableResult,Row.class).print("DSL");
 
-        //SQL风格
-        Table sqlResult = tableEnv.sqlQuery("select id,min(temp) from sensor group by id");
-
-        //查询结果转换成流输出
-        tableEnv.toRetractStream(tableResult, Row.class).print("DSL");
-
-        tableEnv.toRetractStream(sqlResult,Row.class).print("SQL");
-
-        //执行
+        //任务启动
         env.execute();
 
     }

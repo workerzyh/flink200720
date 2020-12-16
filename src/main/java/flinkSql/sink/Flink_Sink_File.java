@@ -25,10 +25,8 @@ public class Flink_Sink_File {
         //获取table执行环境
         StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
 
-        //获取数据并转换bean
-        DataStreamSource<String> input = env.socketTextStream("hadoop102", 9999);
-
-        SingleOutputStreamOperator<SensorReading> mapDS = input.map(new MapFunction<String, SensorReading>() {
+        //从端口获取数据转换bean
+        SingleOutputStreamOperator<SensorReading> inputDS = env.socketTextStream("hadoop102", 9999).map(new MapFunction<String, SensorReading>() {
             @Override
             public SensorReading map(String value) throws Exception {
                 String[] split = value.split(",");
@@ -36,34 +34,32 @@ public class Flink_Sink_File {
             }
         });
 
-        //对流注册一个表
-        Table table = tableEnv.fromDataStream(mapDS);
-
-        //table API DSL风格
-        Table tableResult = table.select("id,temp");
-
+        /*//流注册
+        tableEnv.createTemporaryView("fileSensor",inputDS);
         //SQL风格
-        tableEnv.createTemporaryView("sensor",mapDS);
-        Table sqlResult = tableEnv.sqlQuery("select id,temp from sensor");
+        Table sqlResult = tableEnv.sqlQuery("select id,temp from fileSensor");
 
-        //创建文件连接器
-        tableEnv.connect(new FileSystem().path("tableoutput"))
+        //构建文件连接器
+        tableEnv.connect(new FileSystem().path("sqloutput1"))
                 .withFormat(new OldCsv())
                 .withSchema(new Schema()
-                .field("id", DataTypes.STRING())
-                .field("temp",DataTypes.DOUBLE()))
-                .createTemporaryTable("tableOutTable");
+                     .field("id",DataTypes.STRING())
+                    .field("temp",DataTypes.DOUBLE()))
+                .createTemporaryTable("sqltable1");
 
-        tableEnv.connect(new FileSystem().path("sqloutput"))
+        tableEnv.insertInto("sqltable1",sqlResult);*/
+
+        //DSL风格
+        Table table = tableEnv.fromDataStream(inputDS);
+        Table tableResult = table.select("id,temp");
+        tableEnv.connect(new FileSystem().path("tableoutput1"))
                 .withFormat(new OldCsv())
                 .withSchema(new Schema()
-                        .field("id", DataTypes.STRING())
+                        .field("id",DataTypes.STRING())
                         .field("temp",DataTypes.DOUBLE()))
-                .createTemporaryTable("sqlOutTable");
+                .createTemporaryTable("table2");
+        tableEnv.insertInto("table2",tableResult);
 
-        //将数据写入文件系统
-        tableEnv.insertInto("tableOutTable",tableResult);
-        tableEnv.insertInto("sqlOutTable",sqlResult);
 
         //执行
         env.execute();
