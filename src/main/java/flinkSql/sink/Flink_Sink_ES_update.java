@@ -49,7 +49,7 @@ public class Flink_Sink_ES_update {
         tableEnv.connect(new Elasticsearch()
                         .version("6")
                         .host("hadoop102",9200,"http")
-                        .index("sensor_flink_sink2")
+                        .index("flink_sink_es_update")
                         .documentType("_doc")
                         .bulkFlushMaxActions(1))
                 .withFormat(new Json())
