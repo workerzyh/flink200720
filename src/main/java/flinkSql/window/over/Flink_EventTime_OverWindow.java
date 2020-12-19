@@ -1,4 +1,4 @@
-package flinkSql.time;
+package flinkSql.window.over;
 
 import bean.SensorReading;
 import org.apache.flink.api.common.functions.MapFunction;
@@ -8,20 +8,23 @@ import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.timestamps.BoundedOutOfOrdernessTimestampExtractor;
 import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.table.api.Over;
 import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.Tumble;
 import org.apache.flink.table.api.java.StreamTableEnvironment;
+import org.apache.flink.types.Row;
 
 /**
  * @author zhengyonghong
  * @create 2020--12--18--10:13
  */
-//TODO 事件事件语义
-public class Flink_EventTime_DS {
-    public static void main(String[] args) {
+//TODO 事件时间滚动窗口
+public class Flink_EventTime_OverWindow {
+    public static void main(String[] args) throws Exception {
         //获取执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment().setParallelism(1);
 
-        //指定事件事件语义
+        //设置事件时间语义
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
 
         //获取table执行环境
@@ -29,8 +32,7 @@ public class Flink_EventTime_DS {
 
         //从端口获取数据流并转换
         DataStreamSource<String> input = env.socketTextStream("hadoop102", 9999);
-
-        SingleOutputStreamOperator<SensorReading> mapDS = input.map(new MapFunction<String, SensorReading>() {
+        SingleOutputStreamOperator<SensorReading> SensorDS = input.map(new MapFunction<String, SensorReading>() {
             @Override
             public SensorReading map(String value) throws Exception {
                 String[] split = value.split(",");
@@ -38,18 +40,31 @@ public class Flink_EventTime_DS {
             }
         });
 
-        SingleOutputStreamOperator<SensorReading> sensorReadingSingleOutputStreamOperator = mapDS.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<SensorReading>(Time.seconds(2)) {
+        //设置水位线
+        SingleOutputStreamOperator<SensorReading> waterMarkDS = SensorDS.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<SensorReading>(Time.seconds(2)) {
             @Override
             public long extractTimestamp(SensorReading element) {
                 return element.getTs() * 1000L;
             }
         });
 
-        //将流转换为表并指定处理时间字段
-        Table table = tableEnv.fromDataStream(sensorReadingSingleOutputStreamOperator, "id,ts,temp,rt.rowtime");
+        //转换表，添加时间戳
+        Table table = tableEnv.fromDataStream(waterMarkDS, "id,ts,temp,rt.rowtime");
 
-        //打印表信息
-        table.printSchema();
+        //开窗 Table API风格
+        Table tableResult = table.window(Over.partitionBy("id").orderBy("rt").as("ow"))
+                .select("id,id.count over ow");
+
+        //SQL风格
+        tableEnv.createTemporaryView("sensortable",table);
+        Table sqlResult = tableEnv.sqlQuery("select id,count(id) over(partition by id order by rt) ct from sensortable ");
+
+        //打印结果
+        tableEnv.toAppendStream(tableResult, Row.class).print("table");
+    //    tableEnv.toAppendStream(sqlResult, Row.class).print("sql");
+
+        //启动
+        env.execute();
 
     }
 }

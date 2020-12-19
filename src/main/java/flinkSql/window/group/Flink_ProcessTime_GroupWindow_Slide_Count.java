@@ -1,20 +1,23 @@
-package flinkSql.window;
+package flinkSql.window.group;
 
 import bean.SensorReading;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Slide;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.Tumble;
 import org.apache.flink.table.api.java.StreamTableEnvironment;
+import org.apache.flink.types.Row;
 
 /**
  * @author zhengyonghong
  * @create 2020--12--18--10:13
  */
-public class Flink_ProcessTime_GroupWindow_Slide {
-    public static void main(String[] args) {
+//TODO 处理时间计数窗口
+public class Flink_ProcessTime_GroupWindow_Slide_Count {
+    public static void main(String[] args) throws Exception {
         //获取执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment().setParallelism(1);
 
@@ -23,7 +26,7 @@ public class Flink_ProcessTime_GroupWindow_Slide {
 
         //从端口获取数据流并转换
         DataStreamSource<String> input = env.socketTextStream("hadoop102", 9999);
-        SingleOutputStreamOperator<SensorReading> mapDS = input.map(new MapFunction<String, SensorReading>() {
+        SingleOutputStreamOperator<SensorReading> sensorDS = input.map(new MapFunction<String, SensorReading>() {
             @Override
             public SensorReading map(String value) throws Exception {
                 String[] split = value.split(",");
@@ -31,21 +34,19 @@ public class Flink_ProcessTime_GroupWindow_Slide {
             }
         });
 
-        //基于时间的滚动窗口
-        Table table = tableEnv.fromDataStream(mapDS, "id,ts,temp,pt.proctime");
+       //转换表添加处理时间
+        Table table = tableEnv.fromDataStream(sensorDS, "id,ts,temp,pt.proctime");
+
         //table API
-        //滚动窗口
-        Table tableResult = table.window(Tumble.over("10.seconds").on("pt").as("tw"))
-                .groupBy("tw,id")
+        Table tableResult= table.window(Slide.over("5.rows").every("2.rows").on("pt").as("sw"))
+                .groupBy("sw,id")
                 .select("id,id.count");
 
 
+        //表转换流输出结果
+        tableEnv.toAppendStream(tableResult, Row.class).print("table");
 
-        //SQL风格
-
-
-        //打印表信息
-        table.printSchema();
-
+        //执行
+        env.execute();
     }
 }

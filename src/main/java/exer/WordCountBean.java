@@ -10,6 +10,9 @@ public class WordCountBean {
     private String word;
     private Integer count1;
 
+    public WordCountBean() {
+    }
+
     public WordCountBean(String word, Integer count1) {
         this.word = word;
         this.count1 = count1;
